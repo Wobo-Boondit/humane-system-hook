@@ -2,8 +2,7 @@ mod types;
 use std::convert::Infallible;
 
 use chrono::Utc;
-use rig::completion::ToolDefinition;
-use rig::tool::{Tool, ToolEmbedding};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -48,42 +47,42 @@ impl Tool for WeatherTool {
     type Args = WeatherArgs;
     type Output = LLMWeatherResponse;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Get weather for a latitude and longitude, including current conditions, hourly forecasts, daily forecasts, alerts, and historical weather. Use forecast for normal future forecast ranges such as later today, tomorrow, or this weekend, but do not pass time for forecasts because PirateWeather does not support future time-machine requests. Use historical with a past ISO 8601 time/date for past weather only.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "latitude": {
-                        "type": "number",
-                        "description": "Latitude for the weather location. Required."
-                    },
-                    "longitude": {
-                        "type": "number",
-                        "description": "Longitude for the weather location. Required."
-                    },
-                    "request_type": {
-                        "type": "string",
-                        "enum": ["current", "forecast", "historical", "alerts"],
-                        "description": "The kind of weather information needed. Use current for immediate weather, forecast for normal forecast ranges without time, historical for past weather with time, and alerts for warnings/advisories."
-                    },
-                    "time": {
-                        "type": "string",
-                        "description": "Optional ISO 8601 date or datetime for historical past-weather requests only, e.g. 2026-06-02T15:00:00Z or 2026-06-02. Omit for current, forecast, and alerts. Future times are unsupported."
-                    },
-                    "units": {
-                        "type": "string",
-                        "enum": ["fahrenheit", "celsius"],
-                        "description": "Optional temperature units for temperature, feels_like, high, and low fields. Defaults to fahrenheit unless the user asks for Celsius/metric."
-                    }
-                },
-                "required": ["latitude", "longitude", "request_type"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Get weather for a latitude and longitude, including current conditions, hourly forecasts, daily forecasts, alerts, and historical weather. Use forecast for normal future forecast ranges such as later today, tomorrow, or this weekend, but do not pass time for forecasts because PirateWeather does not support future time-machine requests. Use historical with a past ISO 8601 time/date for past weather only.".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "latitude": {
+                    "type": "number",
+                    "description": "Latitude for the weather location. Required."
+                },
+                "longitude": {
+                    "type": "number",
+                    "description": "Longitude for the weather location. Required."
+                },
+                "request_type": {
+                    "type": "string",
+                    "enum": ["current", "forecast", "historical", "alerts"],
+                    "description": "The kind of weather information needed. Use current for immediate weather, forecast for normal forecast ranges without time, historical for past weather with time, and alerts for warnings/advisories."
+                },
+                "time": {
+                    "type": "string",
+                    "description": "Optional ISO 8601 date or datetime for historical past-weather requests only, e.g. 2026-06-02T15:00:00Z or 2026-06-02. Omit for current, forecast, and alerts. Future times are unsupported."
+                },
+                "units": {
+                    "type": "string",
+                    "enum": ["fahrenheit", "celsius"],
+                    "description": "Optional temperature units for temperature, feels_like, high, and low fields. Defaults to fahrenheit unless the user asks for Celsius/metric."
+                }
+            },
+            "required": ["latitude", "longitude", "request_type"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let units = args.units.unwrap_or(WeatherUnits::Fahrenheit);
         let time = args
             .time

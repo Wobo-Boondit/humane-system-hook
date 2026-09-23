@@ -1,6 +1,5 @@
 use base64::Engine;
 use rig::completion::message::{ImageMediaType, Message, UserContent};
-use rig::OneOrMany;
 use tracing::debug;
 
 use crate::proto::aibus::*;
@@ -74,11 +73,10 @@ pub async fn extract_history(
                 match image_bytes {
                     Some(bytes) => {
                         let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                        let content = OneOrMany::many(vec![
+                        let content = vec![
                             UserContent::text(text),
                             UserContent::image_base64(b64, Some(ImageMediaType::JPEG), None),
-                        ])
-                        .expect("non-empty content vec");
+                        ];
                         history.push(Message::User { content });
                     }
                     None => {

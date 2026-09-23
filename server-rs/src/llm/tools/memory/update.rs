@@ -1,10 +1,7 @@
 use std::convert::Infallible;
 
 use memvid_core::FrameId;
-use rig::{
-    completion::ToolDefinition,
-    tool::{Tool, ToolEmbedding},
-};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -36,39 +33,39 @@ impl Tool for UpdateMemoryTool {
     type Args = UpdateMemoryArgs;
     type Output = MemoryRecord;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Update an existing long-term assistant memory by id. Use after searching memory or when the user identifies a saved memory that should change.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer",
-                        "description": "The memory id/frame id to update."
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "The replacement memory text as a concise standalone statement."
-                    },
-                    "kind": {
-                        "type": "string",
-                        "enum": ["preference", "fact", "project", "instruction", "relationship", "other"],
-                        "description": "Optional replacement memory kind."
-                    },
-                    "importance": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 1,
-                        "description": "Optional replacement importance from 0.0 to 1.0."
-                    }
-                },
-                "required": ["id", "text"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Update an existing long-term assistant memory by id. Use after searching memory or when the user identifies a saved memory that should change.".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "description": "The memory id/frame id to update."
+                },
+                "text": {
+                    "type": "string",
+                    "description": "The replacement memory text as a concise standalone statement."
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["preference", "fact", "project", "instruction", "relationship", "other"],
+                    "description": "Optional replacement memory kind."
+                },
+                "importance": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Optional replacement importance from 0.0 to 1.0."
+                }
+            },
+            "required": ["id", "text"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         self.memory
             .update(args.id, args.text, args.kind, args.importance)
             .await

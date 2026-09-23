@@ -1,10 +1,7 @@
 use std::convert::Infallible;
 
 use memvid_core::normalize_text;
-use rig::{
-    completion::ToolDefinition,
-    tool::{Tool, ToolEmbedding},
-};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -36,35 +33,35 @@ impl Tool for RememberTool {
     type Args = RememberArgs;
     type Output = MemoryRecord;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Save a durable long-term assistant memory. Use only when the user explicitly asks you to remember something, or when a stable user preference/fact/project instruction is clearly worth retaining. Do not store transient conversation details.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "The durable memory to store as a concise standalone statement."
-                    },
-                    "kind": {
-                        "type": "string",
-                        "enum": ["preference", "fact", "project", "instruction", "relationship", "other"],
-                        "description": "The type of memory. Defaults to other."
-                    },
-                    "importance": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 1,
-                        "description": "Memory importance from 0.0 to 1.0. Defaults to 0.5."
-                    }
-                },
-                "required": ["text"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Save a durable long-term assistant memory. Use only when the user explicitly asks you to remember something, or when a stable user preference/fact/project instruction is clearly worth retaining. Do not store transient conversation details.".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The durable memory to store as a concise standalone statement."
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["preference", "fact", "project", "instruction", "relationship", "other"],
+                    "description": "The type of memory. Defaults to other."
+                },
+                "importance": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Memory importance from 0.0 to 1.0. Defaults to 0.5."
+                }
+            },
+            "required": ["text"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let text = match normalize_text(&args.text, 100000) {
             Some(text) => text,
             None => return Err(super::MemoryToolError("Memory text cannot be empty".into())),

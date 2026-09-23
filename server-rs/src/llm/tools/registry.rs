@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use rig::agent::{AgentBuilder, PromptHook};
-use rig::completion::CompletionModel;
+use rig::agent::{AgentBuilder, WithBuilderTools};
 use rig::embeddings::EmbeddingsBuilder;
 use rig::tool::ToolSet;
 use rig::vector_store::in_memory_store::{InMemoryVectorIndex, InMemoryVectorStore};
@@ -65,25 +64,25 @@ impl LlmToolContext {
         }
 
         let builder = ToolSet::builder()
-            .dynamic_tool(NearbySearchTool::new(self.nearby_client.clone()))
-            .dynamic_tool(ReverseGeocodeTool::new(self.osm.clone()))
-            .dynamic_tool(UnderstandSceneTool);
+            .retrieved_tool(NearbySearchTool::new(self.nearby_client.clone()))
+            .retrieved_tool(ReverseGeocodeTool::new(self.osm.clone()))
+            .retrieved_tool(UnderstandSceneTool);
 
         #[cfg(target_os = "android")]
-        let builder = builder.dynamic_tool(DumpLogcatTool);
+        let builder = builder.retrieved_tool(DumpLogcatTool);
 
         let builder = if self.weather.is_configured() {
-            builder.dynamic_tool(WeatherTool::new(self.weather.clone()))
+            builder.retrieved_tool(WeatherTool::new(self.weather.clone()))
         } else {
             builder
         };
 
         let builder = if let Some(memory) = &self.memory {
             builder
-                .dynamic_tool(RememberTool::new(memory.clone()))
-                .dynamic_tool(SearchMemoryTool::new(memory.clone()))
-                .dynamic_tool(UpdateMemoryTool::new(memory.clone()))
-                .dynamic_tool(ForgetMemoryTool::new(memory.clone()))
+                .retrieved_tool(RememberTool::new(memory.clone()))
+                .retrieved_tool(SearchMemoryTool::new(memory.clone()))
+                .retrieved_tool(UpdateMemoryTool::new(memory.clone()))
+                .retrieved_tool(ForgetMemoryTool::new(memory.clone()))
         } else {
             builder
         };
@@ -128,14 +127,7 @@ pub struct ToolResources {
 }
 
 impl ToolResources {
-    pub fn apply<M, P>(
-        self,
-        builder: AgentBuilder<M, P>,
-    ) -> AgentBuilder<M, P, rig::agent::WithBuilderTools>
-    where
-        M: CompletionModel,
-        P: PromptHook<M>,
-    {
-        builder.dynamic_tools(self.sample_count, self.index, self.toolset)
+    pub fn apply(self, builder: AgentBuilder) -> AgentBuilder<WithBuilderTools> {
+        builder.retrieved_tools(self.sample_count, self.index, self.toolset)
     }
 }

@@ -1,9 +1,6 @@
 use std::convert::Infallible;
 
-use rig::{
-    completion::ToolDefinition,
-    tool::{Tool, ToolEmbedding},
-};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -38,30 +35,30 @@ impl Tool for SearchMemoryTool {
     type Args = SearchMemoryArgs;
     type Output = SearchMemoryOutput;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Search long-term assistant memory for preferences, facts, project context, instructions, relationships, or prior saved information relevant to the user request.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Semantic search query for long-term memory."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 20,
-                        "description": "Maximum memories to return. Defaults to 5."
-                    }
-                },
-                "required": ["query"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Search long-term assistant memory for preferences, facts, project context, instructions, relationships, or prior saved information relevant to the user request.".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Semantic search query for long-term memory."
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "Maximum memories to return. Defaults to 5."
+                }
+            },
+            "required": ["query"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let memories = self
             .memory
             .search(args.query, args.limit.unwrap_or(5))

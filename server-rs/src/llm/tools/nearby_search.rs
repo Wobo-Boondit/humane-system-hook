@@ -1,8 +1,7 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::{Tool, ToolEmbedding};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -77,36 +76,36 @@ impl Tool for NearbySearchTool {
     type Args = NearbySearchArgs;
     type Output = NearbySearchOutput;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Search for places, businesses, services, and points of interest near a latitude and longitude. Use this for nearby coffee shops, restaurants, parks, pharmacies, gas stations, stores, attractions, and other local places. The current request coordinates may be available in the system/status context; pass those as latitude and longitude when the user asks for places near them. radius_meters defaults to 1000 meters when omitted. query examples: coffee, restaurant, park, pharmacy, gas station, grocery.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "latitude": {
-                        "type": "number",
-                        "description": "Latitude of the search center. Required; use the current request latitude from system/status context when available."
-                    },
-                    "longitude": {
-                        "type": "number",
-                        "description": "Longitude of the search center. Required; use the current request longitude from system/status context when available."
-                    },
-                    "radius_meters": {
-                        "type": "number",
-                        "description": "Optional search radius in meters. Defaults to 1000 if omitted or non-positive."
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Optional place/business/category query such as coffee, restaurant, park, pharmacy, gas station, or grocery."
-                    }
-                },
-                "required": ["latitude", "longitude"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Search for places, businesses, services, and points of interest near a latitude and longitude. Use this for nearby coffee shops, restaurants, parks, pharmacies, gas stations, stores, attractions, and other local places. The current request coordinates may be available in the system/status context; pass those as latitude and longitude when the user asks for places near them. radius_meters defaults to 1000 meters when omitted. query examples: coffee, restaurant, park, pharmacy, gas station, grocery.".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "latitude": {
+                    "type": "number",
+                    "description": "Latitude of the search center. Required; use the current request latitude from system/status context when available."
+                },
+                "longitude": {
+                    "type": "number",
+                    "description": "Longitude of the search center. Required; use the current request longitude from system/status context when available."
+                },
+                "radius_meters": {
+                    "type": "number",
+                    "description": "Optional search radius in meters. Defaults to 1000 if omitted or non-positive."
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional place/business/category query such as coffee, restaurant, park, pharmacy, gas station, or grocery."
+                }
+            },
+            "required": ["latitude", "longitude"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let radius = args
             .radius_meters
             .filter(|radius| radius.is_finite() && *radius > 0.0)

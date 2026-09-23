@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 
-use rig::completion::ToolDefinition;
-use rig::tool::{Tool, ToolEmbedding};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -17,20 +16,24 @@ impl Tool for UnderstandSceneTool {
     type Args = serde_json::Value;
     type Output = serde_json::Value;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Capture a photo and analyze what's in view. Use when the user asks \
-                what they're looking at, what's in front of them, what object they're pointing \
-                at, or wants you to visually identify or describe something in their environment. \
-                This will trigger the device camera to take a picture and send it to you for \
-                analysis."
-                .to_string(),
-            parameters: json!(null),
-        }
+    fn description(&self) -> String {
+        "Capture a photo and analyze what's in view. Use when the user asks \
+            what they're looking at, what's in front of them, what object they're pointing \
+            at, or wants you to visually identify or describe something in their environment. \
+            This will trigger the device camera to take a picture and send it to you for \
+            analysis."
+            .to_string()
     }
 
-    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {},
+            "required": []
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, _args: Self::Args) -> Result<Self::Output, Self::Error> {
         // Unreachable. This tool will never actually be called
         Ok(json!({}))
     }

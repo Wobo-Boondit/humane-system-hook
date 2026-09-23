@@ -1,11 +1,12 @@
 use std::convert::Infallible;
 
-use rig::completion::ToolDefinition;
-use rig::tool::{Tool, ToolEmbedding};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::Path;
 use tokio::process::Command;
+
+use crate::util::truncate_on_char_boundary;
 
 /// Tool that captures the full Android logcat buffer and writes it to
 /// `/sdcard/PenumbraOS/logcat/logcat_<timestamp>[_<annotation>].txt`.
@@ -42,28 +43,27 @@ impl Tool for DumpLogcatTool {
     type Args = DumpLogcatArgs;
     type Output = DumpLogcatResult;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description:
-                "Capture the full Android logcat (system log) buffer and write it to a file \
-                 on disk. Use this ONLY when the user specifically requests logcat logs."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "annotation": {
-                        "type": "string",
-                        "description": "Optional short context string describing why this logcat \
-                         dump was taken. Will be included in the filename for identification."
-                    }
-                },
-                "required": []
-            }),
-        }
+    fn description(&self) -> String {
+        "Capture the full Android logcat (system log) buffer and write it to a file \
+         on disk. Use this ONLY when the user specifically requests logcat logs."
+            .to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "annotation": {
+                    "type": "string",
+                    "description": "Optional short context string describing why this logcat \
+                     dump was taken. Will be included in the filename for identification."
+                }
+            },
+            "required": []
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let output = Command::new("logcat")
             .args(["-d"])
             .output()
@@ -163,11 +163,8 @@ fn sanitize_annotation(annotation: &str) -> String {
     }
 
     // Trim trailing underscores
-    let result = result.trim_end_matches('_').to_string();
+    let mut result = result.trim_end_matches('_').to_string();
 
-    if result.len() > 30 {
-        result[..30].to_string()
-    } else {
-        result
-    }
+    truncate_on_char_boundary(&mut result, 30);
+    result
 }

@@ -28,9 +28,10 @@ impl GeminiProvider {
             .http_client(http_client.clone())
             .build()?;
 
+        let client = client.interactions_api();
+
         info!("Gemini agent ready (model={})", llm_config.model);
-        let gemini_google_search = llm_config.gemini_google_search;
-        let tools_enabled = llm_config.tools.enabled;
+        let gemini_google_search = llm_config.web_search;
 
         RigBackend::from_client(
             "Gemini",
@@ -40,34 +41,14 @@ impl GeminiProvider {
             http_client,
             memory,
             move |builder| {
-                let mut additional_params = if gemini_google_search {
+                let additional_params = if gemini_google_search {
                     info!("Gemini Google Search grounding enabled");
-                    // The Gemini provider's request builder forwards `tools` from
-                    // additional_params into the GenerateContent request.
                     serde_json::json!({
-                        "tools": [{ "google_search": {} }],
+                        "tools": [{ "type": "google_search" }],
                     })
                 } else {
                     serde_json::json!({})
                 };
-
-                if tools_enabled {
-                    let tool_config = serde_json::json!({
-                        "tool_config": {
-                            "include_server_side_tool_invocations": true
-                        }
-                    });
-
-                    additional_params
-                        .as_object_mut()
-                        .expect("Invalid Gemini additional_params")
-                        .extend(
-                            tool_config
-                                .as_object()
-                                .expect("Invalid Gemini tool_config")
-                                .to_owned(),
-                        );
-                }
 
                 builder.additional_params(additional_params)
             },

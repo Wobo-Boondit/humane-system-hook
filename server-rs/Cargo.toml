@@ -24,8 +24,8 @@ serde_json = "1"
 handlebars = "6"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 async-stream = "0.3"
-rig = { version = "0.37", default-features = false, features = ["reqwest", "native-tls"], package = "rig-core" }
-rig-fastembed = { version = "0.4", default-features = false }
+rig = { version = "0.41", default-features = false, features = ["reqwest", "native-tls", "agent"] }
+rig-fastembed = { version = "0.41", default-features = false }
 toml = "0.8"
 toml_edit = "0.22"
 futures = "0.3"
@@ -64,5 +64,5 @@ tempfile = "3"
 
 [patch.crates-io]
 memvid-core = { git = "https://github.com/agg23/memvid", branch = "no-lock" }
-rig-core = { git = "https://github.com/agg23/rig", branch = "gemini-server-tool-passthrough" }
-rig-fastembed = { git = "https://github.com/agg23/rig", branch = "gemini-server-tool-passthrough" }
+rig = { git = "https://github.com/agg23/rig", branch = "fastembed5.8" }
+rig-fastembed = { git = "https://github.com/agg23/rig", branch = "fastembed5.8" }

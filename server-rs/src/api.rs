@@ -435,7 +435,7 @@ struct LlmSettingsResponse {
     model: String,
     has_api_key: bool,
     base_url: Option<String>,
-    gemini_google_search: bool,
+    web_search: bool,
     tools: LlmToolsSettingsResponse,
     memory: LlmMemorySettingsResponse,
 }
@@ -499,7 +499,7 @@ async fn get_settings(State(state): State<ApiState>) -> Json<SettingsResponse> {
             model: config.llm.model.clone(),
             has_api_key: config.llm.resolve_api_key().is_some(),
             base_url: config.llm.base_url.clone(),
-            gemini_google_search: config.llm.gemini_google_search,
+            web_search: config.llm.web_search,
             tools: LlmToolsSettingsResponse {
                 enabled: config.llm.tools.enabled,
                 dynamic_tool_count: config.llm.tools.dynamic_tool_count,
@@ -881,7 +881,7 @@ struct UpdateLlmSettings {
     model: Option<String>,
     api_key: Option<String>,
     base_url: Option<String>,
-    gemini_google_search: Option<bool>,
+    web_search: Option<bool>,
     tools: Option<UpdateLlmToolsSettings>,
     memory: Option<UpdateLlmMemorySettings>,
 }
@@ -1054,9 +1054,9 @@ async fn update_settings(
                 config.llm.base_url = new_val;
             }
         }
-        if let Some(v) = llm.gemini_google_search {
-            if v != config.llm.gemini_google_search {
-                config.llm.gemini_google_search = v;
+        if let Some(v) = llm.web_search {
+            if v != config.llm.web_search {
+                config.llm.web_search = v;
             }
         }
         if let Some(ref tools) = llm.tools {
@@ -1273,7 +1273,7 @@ async fn update_settings(
             model: config.llm.model.clone(),
             has_api_key: config.llm.resolve_api_key().is_some(),
             base_url: config.llm.base_url.clone(),
-            gemini_google_search: config.llm.gemini_google_search,
+            web_search: config.llm.web_search,
             tools: LlmToolsSettingsResponse {
                 enabled: config.llm.tools.enabled,
                 dynamic_tool_count: config.llm.tools.dynamic_tool_count,
@@ -1368,7 +1368,7 @@ fn persist_config_inner(
                 }
             }
         }
-        table["gemini_google_search"] = toml_edit::value(config.llm.gemini_google_search);
+        table["web_search"] = toml_edit::value(config.llm.web_search);
     }
 
     // --- [llm.tools] ---

@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 
-use rig::completion::ToolDefinition;
-use rig::tool::{Tool, ToolEmbedding};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -31,28 +30,28 @@ impl Tool for ReverseGeocodeTool {
     type Args = ReverseGeocodeArgs;
     type Output = ReverseGeocodeResult;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Look up the human-readable address or place name for latitude and longitude coordinates. Use this for questions like where am I, what city am I in, what is this address, or what place is at these coordinates. CAUTION: Results returned by this lookup may be imprecise or outdated (such as if the user moved).".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "latitude": {
-                        "type": "number",
-                        "description": "Latitude to reverse geocode. Required; use the current request latitude from system/status context when available."
-                    },
-                    "longitude": {
-                        "type": "number",
-                        "description": "Longitude to reverse geocode. Required; use the current request longitude from system/status context when available."
-                    }
-                },
-                "required": ["latitude", "longitude"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Look up the human-readable address or place name for latitude and longitude coordinates. Use this for questions like where am I, what city am I in, what is this address, or what place is at these coordinates. CAUTION: Results returned by this lookup may be imprecise or outdated (such as if the user moved).".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "latitude": {
+                    "type": "number",
+                    "description": "Latitude to reverse geocode. Required; use the current request latitude from system/status context when available."
+                },
+                "longitude": {
+                    "type": "number",
+                    "description": "Longitude to reverse geocode. Required; use the current request longitude from system/status context when available."
+                }
+            },
+            "required": ["latitude", "longitude"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         self.osm
             .reverse_geocode(args.latitude, args.longitude)
             .await

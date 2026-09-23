@@ -84,10 +84,13 @@ pub struct LlmConfig {
     /// Base URL — only used for "openai-compatible" provider.
     pub base_url: Option<String>,
 
-    /// When provider == "gemini", enable Google's built-in Search grounding tool.
-    /// No effect for other providers.
+    /// Enable provider-hosted web search grounding (currently only Gemini and OpenAI)
     #[serde(default)]
-    pub gemini_google_search: bool,
+    pub web_search: bool,
+
+    /// Max output tokens per completion.
+    #[serde(default = "default_max_output_tokens")]
+    pub max_output_tokens: u64,
 
     /// Server-local native LLM tools.
     #[serde(default)]
@@ -255,6 +258,10 @@ fn default_provider() -> LlmProvider {
     LlmProvider::Echo
 }
 
+fn default_max_output_tokens() -> u64 {
+    32_000
+}
+
 fn default_model() -> String {
     "gemini-2.5-flash".into()
 }
@@ -343,7 +350,8 @@ impl Default for LlmConfig {
             model: default_model(),
             api_key: None,
             base_url: None,
-            gemini_google_search: false,
+            web_search: false,
+            max_output_tokens: default_max_output_tokens(),
             tools: LlmToolsConfig::default(),
             memory: LlmMemoryConfig::default(),
         }
@@ -603,6 +611,24 @@ mod tests {
             default_status_prompt()
         );
         assert_eq!(config.storage.media_dir, default_media_dir());
+        assert_eq!(config.llm.max_output_tokens, default_max_output_tokens());
+    }
+
+    #[test]
+    fn parses_explicit_llm_max_output_tokens() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_config(
+            &dir,
+            "custom.toml",
+            r#"
+[llm]
+max_output_tokens = 2048
+"#,
+        );
+
+        let config = Config::load(&path).unwrap();
+
+        assert_eq!(config.llm.max_output_tokens, 2048);
     }
 
     #[test]

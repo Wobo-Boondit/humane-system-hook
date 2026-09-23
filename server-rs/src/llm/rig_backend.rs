@@ -4,21 +4,18 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use reqwest::Client as HttpClient;
-use rig::agent::{Agent, AgentBuilder, HookAction, PromptHook};
-use rig::client::CompletionClient;
+use rig::agent::{Agent, AgentBuilder, AgentHook, CompletionResponseEvent, HookContext, ObservationAction};
+use rig::client::{AgentClientExt, CompletionClient};
 use rig::completion::message::{AssistantContent, ImageMediaType, Message, UserContent};
-use rig::completion::CompletionModel;
-use rig::completion::Prompt;
-use rig::completion::{CompletionResponse, PromptError};
+use rig::completion::{Prompt, PromptError};
 use rig::tool::Tool;
-use rig::OneOrMany;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::config::ResolvedConfig;
 use crate::llm::ChatResult;
 
 use super::backend::{LlmBackend, LlmFuture};
-use super::error::friendly_error_message;
+use super::error::{friendly_error_message, strip_query_strings};
 use super::memory::MemoryService;
 use super::prompt::PromptBuilder;
 use super::request::LlmChatRequest;
@@ -34,16 +31,13 @@ const DEFERRED_VISION_SENTINEL: &str = "__HUMANE_DEFERRED_VISION__";
 #[derive(Clone)]
 struct DeferredVisionHook;
 
-impl<M> PromptHook<M> for DeferredVisionHook
-where
-    M: CompletionModel,
-{
+impl AgentHook for DeferredVisionHook {
     async fn on_completion_response(
         &self,
-        _prompt: &Message,
-        response: &CompletionResponse<M::Response>,
-    ) -> HookAction {
-        let selected_vision = response.choice.iter().any(|content| {
+        _ctx: &HookContext,
+        event: CompletionResponseEvent<'_>,
+    ) -> ObservationAction {
+        let selected_vision = event.content.iter().any(|content| {
             matches!(
                 content,
                 AssistantContent::ToolCall(call)
@@ -52,31 +46,23 @@ where
         });
 
         if selected_vision {
-            HookAction::terminate(DEFERRED_VISION_SENTINEL)
+            ObservationAction::stop(DEFERRED_VISION_SENTINEL.to_string())
         } else {
-            HookAction::cont()
+            ObservationAction::continue_run()
         }
     }
 }
 
 /// Shared LLM backend for providers
-pub struct RigBackend<M>
-where
-    M: CompletionModel + 'static,
-    (): PromptHook<M> + 'static,
-{
+pub struct RigBackend {
     provider_label: &'static str,
-    agent: Agent<M>,
+    agent: Agent,
     request_logger: LlmRequestLogger,
     max_tool_turns: usize,
     tool_concurrency: usize,
 }
 
-impl<M> RigBackend<M>
-where
-    M: CompletionModel + 'static,
-    (): PromptHook<M> + 'static,
-{
+impl RigBackend {
     pub async fn from_client<C, F>(
         provider_label: &'static str,
         client: C,
@@ -87,11 +73,16 @@ where
         customize_builder: F,
     ) -> Result<Arc<dyn LlmBackend>, Box<dyn std::error::Error + Send + Sync>>
     where
-        C: CompletionClient<CompletionModel = M>,
-        F: FnOnce(AgentBuilder<M>) -> AgentBuilder<M>,
+        C: CompletionClient,
+        <C as CompletionClient>::CompletionModel: 'static,
+        F: FnOnce(AgentBuilder) -> AgentBuilder,
     {
         let llm_config = &config.config.llm;
-        let builder = customize_builder(client.agent(&llm_config.model));
+        let builder = customize_builder(
+            client
+                .agent(&llm_config.model)
+                .max_tokens(llm_config.max_output_tokens),
+        );
 
         let tool_resources = if llm_config.tools.enabled {
             let tool_context = LlmToolContext::new(http_client, config, memory);
@@ -120,10 +111,7 @@ where
     }
 }
 
-impl<M> LlmBackend for RigBackend<M>
-where
-    M: CompletionModel + 'static,
-    (): PromptHook<M> + 'static,
+impl LlmBackend for RigBackend
 {
     fn chat<'a>(&'a self, request: LlmChatRequest) -> LlmFuture<'a> {
         Box::pin(async move {
@@ -133,29 +121,43 @@ where
             let started = Instant::now();
 
             let content = if let Some(image_bytes) = &request.image {
-                OneOrMany::many(vec![
+                vec![
                     UserContent::text(utterance.clone()),
                     UserContent::image_base64(
                         &base64::engine::general_purpose::STANDARD.encode(image_bytes),
                         Some(ImageMediaType::JPEG),
                         None,
                     ),
-                ])
-                .expect("non-empty content vec")
+                ]
             } else {
-                OneOrMany::one(UserContent::text(utterance.clone()))
+                vec![UserContent::text(utterance.clone())]
             };
 
             let user_message = Message::User { content };
 
-            let raw_result = self
-                .agent
-                .prompt(user_message)
-                .with_history(history.clone())
-                .max_turns(self.max_tool_turns)
-                .with_tool_concurrency(self.tool_concurrency.max(1))
-                .with_hook(DeferredVisionHook)
-                .await;
+            let mut retried = false;
+            let raw_result = loop {
+                let result = self
+                    .agent
+                    .prompt(user_message.clone())
+                    .history(history.clone())
+                    .max_turns(self.max_tool_turns)
+                    .tool_concurrency(self.tool_concurrency.max(1))
+                    .add_hook(DeferredVisionHook)
+                    .await;
+
+                match result {
+                    Err(ref e) if !retried && is_retryable_send_error(e) => {
+                        retried = true;
+                        warn!(
+                            provider = self.provider_label,
+                            error = %strip_query_strings(&e.to_string()),
+                            "LLM request failed before reaching the server; retrying once"
+                        );
+                    }
+                    other => break other,
+                }
+            };
             let latency_ms = started.elapsed().as_millis();
 
             let result = match raw_result {
@@ -166,7 +168,7 @@ where
                     Ok(ChatResult::DeferredVision)
                 }
                 Err(e) => {
-                    error!(provider = self.provider_label, error = %e, "LLM chat failed");
+                    error!(provider = self.provider_label, error = %strip_query_strings(&e.to_string()), "LLM chat failed");
                     Err(friendly_error_message(&e))
                 }
             };
@@ -189,5 +191,72 @@ where
 
             result
         })
+    }
+}
+
+/// Check for a transport level error, denoting the request never reached the provider and may be retried
+fn is_retryable_send_error(error: &PromptError) -> bool {
+    if !matches!(error, PromptError::CompletionError(_)) {
+        return false;
+    }
+
+    let mut source = std::error::Error::source(error);
+    while let Some(inner) = source {
+        if let Some(e) = inner.downcast_ref::<reqwest::Error>() {
+            return (e.is_connect() || e.is_request()) && !e.is_timeout();
+        }
+
+        source = inner.source();
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rig::completion::CompletionError;
+
+    /// Wrap a reqwest error the way rig's transport does, so the test
+    /// exercises the same source() chain `is_retryable_send_error` walks.
+    fn prompt_error_from(reqwest_err: reqwest::Error) -> PromptError {
+        PromptError::CompletionError(CompletionError::HttpError(
+            rig::http_client::Error::Instance(Box::new(reqwest_err)),
+        ))
+    }
+
+    #[tokio::test]
+    async fn retries_connect_class_errors() {
+        // Nothing listens on this loopback port, so send() fails at connect.
+        let reqwest_err = reqwest::Client::new()
+            .get("http://127.0.0.1:1/")
+            .send()
+            .await
+            .expect_err("connect to a closed port must fail");
+        assert!(is_retryable_send_error(&prompt_error_from(reqwest_err)));
+    }
+
+    #[test]
+    fn does_not_retry_response_class_errors() {
+        let status = PromptError::CompletionError(CompletionError::HttpError(
+            rig::http_client::Error::InvalidStatusCodeWithMessage(
+                http::StatusCode::TOO_MANY_REQUESTS,
+                "rate limited".to_string(),
+            ),
+        ));
+        assert!(!is_retryable_send_error(&status));
+
+        let provider =
+            PromptError::CompletionError(CompletionError::ProviderError("500".to_string()));
+        assert!(!is_retryable_send_error(&provider));
+    }
+
+    #[test]
+    fn does_not_retry_cancellation() {
+        let cancelled = PromptError::PromptCancelled {
+            chat_history: Vec::new(),
+            reason: DEFERRED_VISION_SENTINEL.to_string(),
+        };
+        assert!(!is_retryable_send_error(&cancelled));
     }
 }

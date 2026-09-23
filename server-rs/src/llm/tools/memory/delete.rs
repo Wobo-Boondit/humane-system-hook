@@ -1,10 +1,7 @@
 use std::convert::Infallible;
 
 use memvid_core::FrameId;
-use rig::{
-    completion::ToolDefinition,
-    tool::{Tool, ToolEmbedding},
-};
+use rig::tool::{Tool, ToolContext, ToolEmbedding};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -39,24 +36,24 @@ impl Tool for ForgetMemoryTool {
     type Args = ForgetMemoryArgs;
     type Output = ForgetMemoryOutput;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Delete a long-term assistant memory by id. Use when the user asks you to forget something or remove a saved memory.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer",
-                        "description": "The memory id/frame id to delete."
-                    }
-                },
-                "required": ["id"]
-            }),
-        }
+    fn description(&self) -> String {
+        "Delete a long-term assistant memory by id. Use when the user asks you to forget something or remove a saved memory.".to_string()
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    fn parameters(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "description": "The memory id/frame id to delete."
+                }
+            },
+            "required": ["id"]
+        })
+    }
+
+    async fn call(&self, _context: &mut ToolContext, args: Self::Args) -> Result<Self::Output, Self::Error> {
         self.memory.forget(args.id).await?;
 
         Ok(ForgetMemoryOutput {
