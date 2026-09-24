@@ -2,6 +2,7 @@ mod anthropic;
 mod echo;
 mod gemini;
 mod openai;
+mod os3;
 
 use reqwest::Client as HttpClient;
 use std::sync::Arc;
@@ -13,6 +14,7 @@ use crate::llm::providers::anthropic::AnthropicProvider;
 use crate::llm::providers::echo::EchoProvider;
 use crate::llm::providers::gemini::GeminiProvider;
 use crate::llm::providers::openai::OpenAiProvider;
+use crate::llm::providers::os3::Os3Provider;
 use crate::llm::request_log::LlmRequestLogger;
 
 pub async fn build_backend(
@@ -32,5 +34,6 @@ pub async fn build_backend(
         LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => {
             OpenAiProvider::build(config, http_client, request_logger, memory).await
         }
+        LlmProvider::Os3 => Os3Provider::build(config, http_client, request_logger),
     }
 }

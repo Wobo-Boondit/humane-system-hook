@@ -74,7 +74,16 @@ pub struct ApiState {
     pub device_versions: DeviceVersionSnapshot,
     /// Live camera capture broker for Hermes/Starlight.
     pub capture_broker: CaptureBroker,
+    /// In-progress OS3 login: (email, cookie jar). Passwords never persist.
+    pub os3_auth_jar: Os3AuthState,
 }
+
+/// Cookie jar + email for an in-flight OS3 embedded login.
+#[derive(Clone)]
+pub struct Os3AuthState(
+    pub Arc<tokio::sync::Mutex<Option<String>>>,
+    pub Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>,
+);
 
 // ─── Event types for the streaming endpoint ─────────────────────────
 
@@ -121,6 +130,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/conversations", get(list_conversations))
         .route("/api/conversations/{id}", get(get_conversation))
         .nest("/api", contacts::router())
+        .nest("/api/auth", crate::os3_auth::router())
         .route("/api/device", get(DeviceApi::get_device))
         .route("/api/settings", get(get_settings))
         .route("/api/settings", put(update_settings))
@@ -1321,6 +1331,13 @@ async fn update_settings(
 /// Persist the config to disk using `toml_edit` for format-preserving writes.
 /// Creates a `.bak` backup before overwriting.
 fn persist_config(config_path: &std::path::Path, config: &Config) -> Result<(), String> {
+    persist_config_inner(config_path, config).map_err(|e| e.to_string())
+}
+
+pub(crate) fn persist_config_pub(
+    config_path: &std::path::Path,
+    config: &Config,
+) -> Result<(), String> {
     persist_config_inner(config_path, config).map_err(|e| e.to_string())
 }
 

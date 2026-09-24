@@ -29,6 +29,8 @@ rig-fastembed = { version = "0.41", default-features = false }
 toml = "0.8"
 toml_edit = "0.22"
 futures = "0.3"
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
 base64 = "0.22"
 rcgen = "0.14"
 aes-gcm = "0.10"

@@ -47,6 +47,8 @@ pub enum LlmProvider {
     OpenAi,
     #[serde(rename = "openai-compatible")]
     OpenAiCompatible,
+    #[serde(rename = "os3")]
+    Os3,
 }
 
 impl LlmProvider {
@@ -58,6 +60,7 @@ impl LlmProvider {
             Self::Anthropic => "anthropic",
             Self::OpenAi => "openai",
             Self::OpenAiCompatible => "openai-compatible",
+            Self::Os3 => "os3",
         }
     }
 }
@@ -552,6 +555,7 @@ impl LlmConfig {
             LlmProvider::Gemini => "GEMINI_API_KEY",
             LlmProvider::Anthropic => "ANTHROPIC_API_KEY",
             LlmProvider::OpenAi | LlmProvider::OpenAiCompatible => "OPENAI_API_KEY",
+            LlmProvider::Os3 => "OS3_ACCESS_TOKEN",
             LlmProvider::Echo => return None,
         };
 

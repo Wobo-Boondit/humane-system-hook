@@ -9,6 +9,7 @@ mod capture_broker;
 mod config;
 mod db;
 mod dedup;
+mod os3_auth;
 mod esim;
 mod external;
 mod llm;
@@ -483,6 +484,10 @@ async fn async_main(config_path: PathBuf) -> Result<(), Box<dyn std::error::Erro
         contact_client_reset_pending: Arc::new(AtomicBool::new(false)),
         device_versions,
         capture_broker,
+        os3_auth_jar: api::Os3AuthState(
+            Arc::new(tokio::sync::Mutex::new(None)),
+            Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        ),
     };
 
     // CORS layer for the web portal (public HTTPS → local HTTP via LNA).
