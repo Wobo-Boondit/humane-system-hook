@@ -85,7 +85,7 @@ pub struct DumbOs3Backend {
 #[derive(Deserialize)]
 struct RouteResponse {
     kind: String,
-    #[serde(default)]
+    #[serde(default, rename = "instanceId")]
     instance_id: Option<String>,
 }
 
