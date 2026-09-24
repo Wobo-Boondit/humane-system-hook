@@ -188,6 +188,7 @@ impl DumbOs3Backend {
             .header("User-Agent", OS3_UA)
             .header("Content-Type", "application/json")
             .body("{}")
+            .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
             .map_err(|e| format!("OS3 route request failed: {e}"))?;
@@ -229,9 +230,13 @@ impl DumbOs3Backend {
             OS3_UA.parse().map_err(|e| format!("ua: {e}"))?,
         );
 
-        let (mut ws, _resp) = tokio_tungstenite::connect_async(req)
-            .await
-            .map_err(|e| format!("OS3 ws connect failed: {e}"))?;
+        let (mut ws, _resp) = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            tokio_tungstenite::connect_async(req),
+        )
+        .await
+        .map_err(|_| "OS3 ws connect timed out".to_string())?
+        .map_err(|e| format!("OS3 ws connect failed: {e}"))?;
 
         // init -> init_ack
         let stored_session_id = self.load_session_id();
